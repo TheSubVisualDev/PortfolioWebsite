@@ -8,7 +8,6 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { FXAAShader } from "three/addons/shaders/FXAAShader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { color } from "three/tsl";
 
 type Project = {
   id: string;
@@ -118,8 +117,8 @@ const PROJECTS: Project[] = [
       "Texture and material work",
     ],
     award: null,
-    color: 0xf5c842,
-    emissive: 0xf5c842,
+    color: 0xffffff,
+    emissive: 0xffffff,
     geometry: "box",
     images: ["/images/steel-town/stt-m-1.jpg", "/images/steel-town/stt-m-2.jpg", "/images/steel-town/stt-s-1.jpg", "/images/steel-town/stt-s-2.jpg", "/images/steel-town/stt-s-3.jpg", "/images/steel-town/stt-s-4.jpg"],
   },
@@ -213,7 +212,8 @@ export default function Home() {
     composer.addPass(bloom);
     fxaaPass = new ShaderPass(FXAAShader);
     composer.addPass(fxaaPass);
-
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
     setRendererSize();
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.24);
@@ -300,7 +300,7 @@ export default function Home() {
     const objects: THREE.Mesh<THREE.BufferGeometry, THREE.Material>[] = PROJECTS.map((project, i) => {
       const geo = makeGeometry(project.geometry);
       const material = new THREE.MeshToonMaterial({
-        color: project.color,
+        color: project.id === "steel-town" ? 0xffffff : project.color,
         gradientMap,
         toneMapped: true,
       } as any);
@@ -345,20 +345,31 @@ export default function Home() {
           (gltf) => {
             const loadedMesh = gltf.scene.getObjectByProperty("type", "Mesh") as THREE.Mesh | undefined;
             if (!loadedMesh) return;
+
             mesh.geometry.dispose();
-            mesh.geometry = loadedMesh.geometry.clone();
+            const geometry = loadedMesh.geometry.clone();
+            if (!geometry.attributes.normal) {
+              geometry.computeVertexNormals();
+            }
+            mesh.geometry = geometry;
 
-            const loadedMaterial = loadedMesh.material as THREE.MeshToonMaterial | undefined;
+            const loadedMaterial = loadedMesh.material as THREE.Material | THREE.Material[] | undefined;
+            const sourceMaterial = Array.isArray(loadedMaterial)
+              ? loadedMaterial.find((mat): mat is THREE.MeshStandardMaterial => (mat as any).isMeshStandardMaterial)
+              : loadedMaterial;
 
-            if (loadedMaterial && loadedMaterial.map) {
-              const existingMaterial = mesh.material as THREE.MeshToonMaterial;
-
-              existingMaterial.map = loadedMaterial.map;
-              existingMaterial.emissive = loadedMaterial.emissive;
-              existingMaterial.emissiveMap = loadedMaterial.emissiveMap;
-              existingMaterial.needsUpdate = true;
+            if (sourceMaterial && (sourceMaterial as any).map) {
+              const texture = (sourceMaterial as any).map as THREE.Texture;
+              if ('colorSpace' in texture) texture.colorSpace = THREE.SRGBColorSpace;
+              const toonMaterial = mesh.material as THREE.MeshToonMaterial;
+              toonMaterial.map = texture;
+              toonMaterial.emissive = (sourceMaterial as any).emissive ?? null;
+              toonMaterial.emissiveMap = (sourceMaterial as any).emissiveMap ?? null;
+              toonMaterial.emissiveIntensity = 0.5;
+              toonMaterial.needsUpdate = true;
+            }
           }
-      });
+        );
 
         // loader.load(
         //   "/Models/stt-ingot-wire.glb",
