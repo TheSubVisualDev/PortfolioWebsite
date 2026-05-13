@@ -150,7 +150,6 @@ export default function Home() {
 
     const isMobile = window.innerWidth < 768;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x080808);
@@ -159,6 +158,17 @@ export default function Home() {
     const camera = new THREE.PerspectiveCamera(55, canvas.clientWidth / canvas.clientHeight, 0.1, 200);
     camera.position.set(0, 0, 10);
 
+    const setRendererSize = () => {
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+      renderer.setPixelRatio(dpr);
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      if (composer) composer.setSize(width, height);
+    };
+
     let composer: EffectComposer | undefined;
     if (!isMobile) {
       composer = new EffectComposer(renderer);
@@ -166,6 +176,8 @@ export default function Home() {
       const bloom = new UnrealBloomPass(new THREE.Vector2(canvas.clientWidth, canvas.clientHeight), 0.6, 0.5, 0.82);
       composer.addPass(bloom);
     }
+
+    setRendererSize();
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
     scene.add(ambientLight);
@@ -226,12 +238,7 @@ export default function Home() {
     const currentLookAt = new THREE.Vector3().copy(targetLookAt);
 
     const resizeCanvas = () => {
-      const width = canvas.clientWidth;
-      const height = canvas.clientHeight;
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
-      if (composer) composer.setSize(width, height);
+      setRendererSize();
     };
 
     const updateSceneIndex = (index: number) => {
