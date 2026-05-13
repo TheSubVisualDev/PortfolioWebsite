@@ -260,6 +260,23 @@ export default function Home() {
         roughness: 0.3,
         metalness: 0.6,
       });
+
+      material.onBeforeCompile = (shader) => {
+        shader.vertexShader = shader.vertexShader.replace(
+          "#include <begin_vertex>",
+          `#include <begin_vertex>
+          transformed = floor(transformed * 16.0 + 0.5) / 16.0;`
+        );
+
+        shader.fragmentShader = shader.fragmentShader
+          .replace(/max\( dot\( normal, directionalLightDirection\[ i \] \), 0\.0 \)/g,
+            "max( max( dot( normal, directionalLightDirection[ i ] ), 0.0 ) * 0.5 + 0.5, 0.5 )")
+          .replace(/max\( dot\( normal, pointLightDirection\[ i \] \), 0\.0 \)/g,
+            "max( max( dot( normal, pointLightDirection[ i ] ), 0.0 ) * 0.5 + 0.5, 0.5 )")
+          .replace(/max\( dot\( normal, spotLightDirection\[ i \] \), 0\.0 \)/g,
+            "max( max( dot( normal, spotLightDirection[ i ] ), 0.0 ) * 0.5 + 0.5, 0.5 )");
+      };
+
       const mesh = new THREE.Mesh(geo, material);
       const zPos = -i * SPACING;
       const xOff = [0, 1.2, -1, 0.8, -0.6][i] ?? 0;
