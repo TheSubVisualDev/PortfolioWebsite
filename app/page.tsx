@@ -5,6 +5,8 @@ import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { FXAAShader } from "three/addons/shaders/FXAAShader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 type Project = {
@@ -141,7 +143,13 @@ export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
   const [hintsHidden, setHintsHidden] = useState(false);
+  const [showTapPrompt, setShowTapPrompt] = useState(true);
   const [loaderDone, setLoaderDone] = useState(false);
+  const panelOpenRef = useRef(false);
+
+  useEffect(() => {
+    panelOpenRef.current = panelOpen;
+  }, [panelOpen]);
 
   const selectedProject = PROJECTS[currentIndex];
 
@@ -149,11 +157,20 @@ export default function Home() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const markInteraction = () => {
+      setShowTapPrompt(false);
+      setHintsHidden(true);
+    };
+
     const isMobile = window.innerWidth < 768;
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setClearColor(0x000000, 0);
+    if ('outputColorSpace' in renderer) {
+      (renderer as any).outputColorSpace = THREE.SRGBColorSpace;
+    }
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x080808);
+    scene.background = null;
     scene.fog = new THREE.FogExp2(0x080808, 0.035);
 
     const camera = new THREE.PerspectiveCamera(55, canvas.clientWidth / canvas.clientHeight, 0.1, 200);
@@ -162,26 +179,40 @@ export default function Home() {
     const setRendererSize = () => {
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
-      const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2.5);
       renderer.setPixelRatio(dpr);
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       if (composer) composer.setSize(width, height);
+      if (fxaaPass) fxaaPass.material.uniforms["resolution"].value.set(1 / (width * dpr), 1 / (height * dpr));
+      if (renderTarget) renderTarget.setSize(width * dpr, height * dpr);
     };
 
+    let renderTarget: THREE.WebGLRenderTarget | undefined;
     let composer: EffectComposer | undefined;
-    composer = new EffectComposer(renderer);
+    let fxaaPass: ShaderPass | undefined;
+
+    //MSAA Code.
+    // const msaaSamples = renderer.capabilities.isWebGL2 ? 4 : 0;
+    // renderTarget = new THREE.WebGLRenderTarget(canvas.clientWidth, canvas.clientHeight, {
+    //   format: THREE.RGBAFormat,
+    //   samples: msaaSamples,
+    // });
+
+    composer = new EffectComposer(renderer, renderTarget);
     composer.addPass(new RenderPass(scene, camera));
     const bloom = new UnrealBloomPass(new THREE.Vector2(canvas.clientWidth, canvas.clientHeight), 0.9, 0.8, 0.35);
     composer.addPass(bloom);
+    fxaaPass = new ShaderPass(FXAAShader);
+    composer.addPass(fxaaPass);
 
     setRendererSize();
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.24);
     scene.add(ambientLight);
 
-    const fillLight = new THREE.DirectionalLight(0xffffff, 1);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 1.4);
     fillLight.position.set(-5, 3, 5);
     scene.add(fillLight);
 
@@ -210,10 +241,14 @@ export default function Home() {
     const particleCount = isMobile ? 400 : 900;
     const particleGeometry = new THREE.BufferGeometry();
     const particlePositions = new Float32Array(particleCount * 3);
+    const particleVelocity = new Float32Array(particleCount * 3);
     for (let i = 0; i < particleCount; i++) {
       particlePositions[i * 3] = (Math.random() - 0.5) * 160;
       particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 80;
       particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 120;
+      particleVelocity[i * 3] = (Math.random() - 0.5) * 0.004;
+      particleVelocity[i * 3 + 1] = (Math.random() - 0.5) * 0.004;
+      particleVelocity[i * 3 + 2] = (Math.random() - 0.5) * 0.004;
     }
     particleGeometry.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3));
 
@@ -316,6 +351,7 @@ export default function Home() {
     let targetCamPos = cameraTargets[0].pos.clone();
     let targetLookAt = cameraTargets[0].look.clone();
     const currentLookAt = new THREE.Vector3().copy(targetLookAt);
+    const wobbleOffset = new THREE.Vector3();
 
     const resizeCanvas = () => {
       setRendererSize();
@@ -334,7 +370,7 @@ export default function Home() {
       if (index < 0 || index >= PROJECTS.length) return;
       const nextIndex = Math.min(Math.max(index, 0), PROJECTS.length - 1);
       updateSceneIndex(nextIndex);
-      if (openPanel) setPanelOpen(true);
+      if (openPanel && !isMobile) setPanelOpen(true);
     };
 
     goToRef.current = goTo;
@@ -351,7 +387,7 @@ export default function Home() {
       if (hits.length > 0) {
         const idx = hits[0].object.userData.index as number;
         if (idx === currentIndexRef) {
-          setPanelOpen(true);
+          if (isMobile) setPanelOpen(true);
         } else {
           goTo(idx, false);
         }
@@ -359,6 +395,7 @@ export default function Home() {
     };
 
     const onCanvasClick = (event: MouseEvent) => {
+      markInteraction();
       handleCanvasInteraction(event.clientX, event.clientY);
     };
 
@@ -366,6 +403,7 @@ export default function Home() {
       event.preventDefault();
       const touch = event.changedTouches[0];
       if (!touch) return;
+      markInteraction();
 
       const dx = touchStart.x - touch.clientX;
       const dy = touchStart.y - touch.clientY;
@@ -381,10 +419,11 @@ export default function Home() {
     const onWheel = (event: WheelEvent) => {
       if (wheelLocked) return;
       wheelLocked = true;
+      markInteraction();
       window.setTimeout(() => {
         wheelLocked = false;
       }, 700);
-      goTo(currentIndexRef + (event.deltaY > 0 ? 1 : -1));
+      goTo(currentIndexRef + (event.deltaY > 0 ? 1 : -1), false);
     };
 
     const touchStart = { x: 0, y: 0 };
@@ -423,9 +462,33 @@ export default function Home() {
         mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.05);
       });
 
-      camera.position.lerp(targetCamPos, 0.06);
-      currentLookAt.lerp(targetLookAt, 0.06);
-      camera.lookAt(currentLookAt);
+      const positions = particleGeometry.getAttribute("position") as THREE.BufferAttribute;
+      for (let i = 0; i < particleCount; i++) {
+        const idx = i * 3;
+        particleVelocity[idx] = particleVelocity[idx] * 0.88 + (Math.random() - 0.5) * 0.0014;
+        particleVelocity[idx + 1] = particleVelocity[idx + 1] * 0.88 + (Math.random() - 0.5) * 0.0014;
+        particleVelocity[idx + 2] = particleVelocity[idx + 2] * 0.88 + (Math.random() - 0.5) * 0.0014;
+        positions.array[idx] += particleVelocity[idx];
+        positions.array[idx + 1] += particleVelocity[idx + 1];
+        positions.array[idx + 2] += particleVelocity[idx + 2];
+      }
+      positions.needsUpdate = true;
+
+      const panelBias = panelOpenRef.current && !isMobile ? 2.5 : 0;
+      const wobbleTarget = targetCamPos.clone().add(new THREE.Vector3(
+        Math.sin(t * 0.83) * 0.06,
+        Math.sin(t * 1.1) * 0.035,
+        Math.sin(t * 0.58) * 0.025
+      )).add(new THREE.Vector3(panelBias * 0.25, 0, 0));
+      camera.position.lerp(wobbleTarget, 0.1);
+      const adjustedLookAt = targetLookAt.clone().add(new THREE.Vector3(panelBias, 0, 0));
+      currentLookAt.lerp(adjustedLookAt, 0.1);
+      const lookAtWobble = currentLookAt.clone().add(new THREE.Vector3(
+        Math.sin(t * 1.2) * 0.06,
+        Math.sin(t * 1.4) * 0.035,
+        0
+      ));
+      camera.lookAt(lookAtWobble);
 
       if (composer) {
         composer.render();
@@ -452,6 +515,7 @@ export default function Home() {
       window.cancelAnimationFrame(frameId);
       renderer.dispose();
       composer?.dispose();
+      renderTarget?.dispose();
       scene.clear();
       objects.forEach((mesh) => {
         mesh.geometry.dispose();
@@ -469,7 +533,9 @@ export default function Home() {
   }, []);
 
   const handleNavClick = (index: number) => {
-    goToRef.current?.(index, false);
+    setShowTapPrompt(false);
+    setHintsHidden(true);
+    goToRef.current?.(index, true);
   };
 
   return (
@@ -524,6 +590,10 @@ export default function Home() {
       </nav>
 
       <canvas id="scene-canvas" ref={canvasRef}></canvas>
+
+      <div className={`tap-hint-overlay${showTapPrompt && currentIndex === 0 ? "" : " hidden"}`}>
+        TAP TO SEE MORE
+      </div>
 
       <div className={`info-panel${panelOpen ? " open" : ""}`}>
         <button type="button" className="panel-close" onClick={() => setPanelOpen(false)}>
