@@ -292,6 +292,35 @@ canvas {
   line-height: 1.6;
 }
 
+.panel-gallery {
+  column-count: 2;
+  column-gap: 8px;
+  margin-top: 24px;
+}
+
+.gallery-item {
+  display: inline-block;
+  width: 100%;
+  margin-bottom: 8px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  break-inside: avoid;
+}
+
+.gallery-item img {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+@media (max-width: 767px) {
+  .panel-gallery {
+    column-count: 1;
+  }
+}
+
 /* ── SCROLL HINT ── */
 .scroll-hint {
   position: fixed;

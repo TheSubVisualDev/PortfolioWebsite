@@ -8,6 +8,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { FXAAShader } from "three/addons/shaders/FXAAShader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { color } from "three/tsl";
 
 type Project = {
   id: string;
@@ -21,6 +22,7 @@ type Project = {
   color: number;
   emissive: number;
   geometry: string;
+  images: string[];
 };
 
 const PROJECTS: Project[] = [
@@ -42,6 +44,7 @@ const PROJECTS: Project[] = [
     color: 0x4a9eff,
     emissive: 0x4a9eff,
     geometry: "icosahedron",
+    images: [],
   },
   {
     id: "howlcast",
@@ -60,6 +63,7 @@ const PROJECTS: Project[] = [
     color: 0x9b59f5,
     emissive: 0x3d1a6e,
     geometry: "torus",
+    images: ["/images/howlcast/hc-cy-day.webp", "/images/howlcast/hc-cy-nit.webp", "/images/howlcast/sop1.jpg", "/images/howlcast/tfw1.jpg"],
   },
   {
     id: "infinite-museum",
@@ -78,6 +82,7 @@ const PROJECTS: Project[] = [
     color: 0xff6eb4,
     emissive: 0x6e1a4a,
     geometry: "octahedron",
+    images: ["/images/infinite-museum/Foyer-done-1.jpg", "/images/infinite-museum/Foyer-done-2.jpg", "/images/infinite-museum/IM-Foyer-indev.jpg", "/images/infinite-museum/im_f1_basicmats.jpg", "/images/infinite-museum/im_f1_blockout.jpg", "/images/infinite-museum/im_f1_firstpass.jpg", "/images/infinite-museum/im_mj2.jpg"],
   },
   {
     id: "voyagers",
@@ -98,6 +103,7 @@ const PROJECTS: Project[] = [
     color: 0xff8c42,
     emissive: 0x6e3010,
     geometry: "cone",
+    images: ["/images/voyagers/voy-c-1.jpg", "/images/voyagers/voy-m-1.jpg"],
   },
   {
     id: "steel-town",
@@ -115,6 +121,7 @@ const PROJECTS: Project[] = [
     color: 0xf5c842,
     emissive: 0xf5c842,
     geometry: "box",
+    images: ["/images/steel-town/stt-m-1.jpg", "/images/steel-town/stt-m-2.jpg", "/images/steel-town/stt-s-1.jpg", "/images/steel-town/stt-s-2.jpg", "/images/steel-town/stt-s-3.jpg", "/images/steel-town/stt-s-4.jpg"],
   },
 ];
 
@@ -238,7 +245,7 @@ export default function Home() {
     gradientMap.minFilter = THREE.NearestFilter;
     gradientMap.needsUpdate = true;
 
-    const particleCount = isMobile ? 400 : 900;
+    const particleCount = isMobile ? 1200 : 5000;
     const particleGeometry = new THREE.BufferGeometry();
     const particlePositions = new Float32Array(particleCount * 3);
     const particleVelocity = new Float32Array(particleCount * 3);
@@ -285,6 +292,10 @@ export default function Home() {
       { x: 32, y: 0.5, z: -1.2 },
     ];
 
+    const texLoader = new THREE.TextureLoader();
+
+
+
     const loader = new GLTFLoader();
     const objects: THREE.Mesh<THREE.BufferGeometry, THREE.Material>[] = PROJECTS.map((project, i) => {
       const geo = makeGeometry(project.geometry);
@@ -327,6 +338,44 @@ export default function Home() {
             mesh.add(wire);
           }
         );
+
+      } else if (project.id === "steel-town") {
+        loader.load(
+          "/Models/stt-ingot-f.glb",
+          (gltf) => {
+            const loadedMesh = gltf.scene.getObjectByProperty("type", "Mesh") as THREE.Mesh | undefined;
+            if (!loadedMesh) return;
+            mesh.geometry.dispose();
+            mesh.geometry = loadedMesh.geometry.clone();
+
+            const loadedMaterial = loadedMesh.material as THREE.MeshToonMaterial | undefined;
+
+            if (loadedMaterial && loadedMaterial.map) {
+              const existingMaterial = mesh.material as THREE.MeshToonMaterial;
+
+              existingMaterial.map = loadedMaterial.map;
+              existingMaterial.emissive = loadedMaterial.emissive;
+              existingMaterial.emissiveMap = loadedMaterial.emissiveMap;
+              existingMaterial.needsUpdate = true;
+          }
+      });
+
+        // loader.load(
+        //   "/Models/stt-ingot-wire.glb",
+        //   (gltf) => {
+        //     const wireMesh = gltf.scene.getObjectByProperty("type", "Mesh") as THREE.Mesh | undefined;
+        //     if (!wireMesh) return;
+        //     const wireMaterial = new THREE.MeshBasicMaterial({
+        //       color: project.color,
+        //       wireframe: true,
+        //       transparent: true,
+        //       opacity: 0.6,
+        //       toneMapped: false,
+        //     });
+        //     const wire = new THREE.Mesh(wireMesh.geometry.clone(), wireMaterial);
+        //     mesh.add(wire);
+        //   }
+        // );
       } else {
         const wireMaterial = new THREE.MeshBasicMaterial({
           color: project.color,
@@ -615,6 +664,15 @@ export default function Home() {
         {selectedProject.award ? (
           <div className="panel-award" style={{ whiteSpace: "pre-line" }}>
             {selectedProject.award}
+          </div>
+        ) : null}
+        {selectedProject.images.length > 0 ? (
+          <div className="panel-gallery">
+            {selectedProject.images.map((image) => (
+              <div key={image} className="gallery-item">
+                <img src={image} alt="Project work" loading="lazy" />
+              </div>
+            ))}
           </div>
         ) : null}
       </div>
