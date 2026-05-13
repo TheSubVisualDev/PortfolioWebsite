@@ -136,7 +136,7 @@ function makeGeometry(type: string) {
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const goToRef = useRef<(index: number, openPanel?: boolean) => void>();
+  const goToRef = useRef<((index: number, openPanel?: boolean) => void) | undefined>(undefined);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
   const [hintsHidden, setHintsHidden] = useState(false);
@@ -275,12 +275,19 @@ export default function Home() {
       handleCanvasInteraction(event.clientX, event.clientY);
     };
 
-    const onCanvasTouchEnd = (event: TouchEvent) => {
+    const onTouchEnd = (event: TouchEvent) => {
       event.preventDefault();
       const touch = event.changedTouches[0];
-      if (touch) {
-        handleCanvasInteraction(touch.clientX, touch.clientY);
+      if (!touch) return;
+
+      const dx = touchStart.x - touch.clientX;
+      const dy = touchStart.y - touch.clientY;
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+        goTo(currentIndexRef + (dx > 0 ? 1 : -1));
+        return;
       }
+
+      handleCanvasInteraction(touch.clientX, touch.clientY);
     };
 
     let wheelLocked = false;
@@ -299,14 +306,6 @@ export default function Home() {
       touchStart.y = event.touches[0].clientY;
     };
 
-    const onTouchEndSwipe = (event: TouchEvent) => {
-      const dx = touchStart.x - event.changedTouches[0].clientX;
-      const dy = touchStart.y - event.changedTouches[0].clientY;
-      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
-        goTo(currentIndexRef + (dx > 0 ? 1 : -1));
-      }
-    };
-
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "ArrowDown" || event.key === "ArrowRight") goTo(currentIndexRef + 1);
       if (event.key === "ArrowUp" || event.key === "ArrowLeft") goTo(currentIndexRef - 1);
@@ -315,12 +314,13 @@ export default function Home() {
     };
 
     canvas.addEventListener("click", onCanvasClick);
-    canvas.addEventListener("touchend", onCanvasTouchEnd, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
     canvas.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("wheel", onWheel, { passive: true });
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("resize", resizeCanvas);
 
+    let frameId = 0;
     const clock = new THREE.Clock();
     const animate = () => {
       frameId = window.requestAnimationFrame(animate);
@@ -348,16 +348,17 @@ export default function Home() {
       }
     };
 
-    let frameId = 0;
     animate();
     goTo(0, false);
 
     const hintTimeout = window.setTimeout(() => setHintsHidden(true), 5000);
+    const loaderTimeout = window.setTimeout(() => setLoaderDone(true), 1400);
 
     return () => {
       window.clearTimeout(hintTimeout);
+      window.clearTimeout(loaderTimeout);
       canvas.removeEventListener("click", onCanvasClick);
-      canvas.removeEventListener("touchend", onCanvasTouchEnd);
+      canvas.removeEventListener("touchend", onTouchEnd);
       canvas.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("keydown", onKeyDown);
@@ -386,7 +387,7 @@ export default function Home() {
 
   return (
     <div>
-      <div id="loader" className={panelOpen ? "" : ""}>
+      <div id="loader" className={loaderDone ? "done" : ""}>
         <div className="loader-name">LUNA BEAUVOIS</div>
         <div className="loader-bar-track">
           <div className="loader-bar"></div>
