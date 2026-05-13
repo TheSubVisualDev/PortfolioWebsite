@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
 type Project = {
@@ -134,6 +135,51 @@ function makeGeometry(type: string) {
   }
 }
 
+const DitherShader = {
+  uniforms: {
+    tDiffuse: { value: null as THREE.Texture | null },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform sampler2D tDiffuse;
+
+    float bayerDither(vec2 coord) {
+      vec2 cell = mod(coord, 4.0);
+      float x = cell.x;
+      float y = cell.y;
+      float value = 0.0;
+      if (x < 2.0) {
+        if (y < 2.0) {
+          value = 0.0;
+        } else {
+          value = 8.0;
+        }
+      } else {
+        if (y < 2.0) {
+          value = 12.0;
+        } else {
+          value = 4.0;
+        }
+      }
+      return (value + 0.5) / 16.0;
+    }
+
+    void main() {
+      vec4 color = texture2D(tDiffuse, vUv);
+      float dither = bayerDither(gl_FragCoord.xy);
+      color.rgb = floor(color.rgb * 16.0 + dither) / 16.0;
+      gl_FragColor = color;
+    }
+  `,
+};
+
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const goToRef = useRef<((index: number, openPanel?: boolean) => void) | undefined>(undefined);
@@ -150,6 +196,8 @@ export default function Home() {
 
     const isMobile = window.innerWidth < 768;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    (renderer as any).outputEncoding = (THREE as any).sRGBEncoding;
+    (renderer as any).dither = true;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x080808);
@@ -175,6 +223,8 @@ export default function Home() {
       composer.addPass(new RenderPass(scene, camera));
       const bloom = new UnrealBloomPass(new THREE.Vector2(canvas.clientWidth, canvas.clientHeight), 0.6, 0.5, 0.82);
       composer.addPass(bloom);
+      const ditherPass = new ShaderPass(DitherShader as any);
+      composer.addPass(ditherPass);
     }
 
     setRendererSize();
@@ -236,6 +286,7 @@ export default function Home() {
     let targetCamPos = cameraTargets[0].pos.clone();
     let targetLookAt = cameraTargets[0].look.clone();
     const currentLookAt = new THREE.Vector3().copy(targetLookAt);
+    const jitterStrength = isMobile ? 0.012 : 0.02;
 
     const resizeCanvas = () => {
       setRendererSize();
@@ -344,7 +395,8 @@ export default function Home() {
       });
 
       accentLight.position.lerp(objects[currentIndexRef].position, 0.08);
-      camera.position.lerp(targetCamPos, 0.06);
+      const jitterTarget = targetCamPos.clone().add(new THREE.Vector3((Math.random() - 0.5) * jitterStrength, (Math.random() - 0.5) * jitterStrength, 0));
+      camera.position.lerp(jitterTarget, 0.06);
       currentLookAt.lerp(targetLookAt, 0.06);
       camera.lookAt(currentLookAt);
 
