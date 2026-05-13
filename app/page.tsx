@@ -181,9 +181,9 @@ export default function Home() {
     const particleGeometry = new THREE.BufferGeometry();
     const particlePositions = new Float32Array(particleCount * 3);
     for (let i = 0; i < particleCount; i++) {
-      particlePositions[i * 3] = (Math.random() - 0.5) * 80;
-      particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 40;
-      particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+      particlePositions[i * 3] = (Math.random() - 0.5) * 160;
+      particlePositions[i * 3 + 1] = (Math.random() - 0.5) * 80;
+      particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 120;
     }
     particleGeometry.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3));
     const particleMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.35 });
