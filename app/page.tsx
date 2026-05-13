@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 type Project = {
   id: string;
@@ -38,7 +38,7 @@ const PROJECTS: Project[] = [
     ],
     award: null,
     color: 0x4a9eff,
-    emissive: 0x1a3a6e,
+    emissive: 0x4a9eff,
     geometry: "icosahedron",
   },
   {
@@ -111,7 +111,7 @@ const PROJECTS: Project[] = [
     ],
     award: null,
     color: 0xf5c842,
-    emissive: 0x6e4e10,
+    emissive: 0xf5c842,
     geometry: "box",
   },
 ];
@@ -135,51 +135,6 @@ function makeGeometry(type: string) {
   }
 }
 
-const DitherShader = {
-  uniforms: {
-    tDiffuse: { value: null as THREE.Texture | null },
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    varying vec2 vUv;
-    uniform sampler2D tDiffuse;
-
-    float bayerDither(vec2 coord) {
-      vec2 cell = mod(coord, 4.0);
-      float x = cell.x;
-      float y = cell.y;
-      float value = 0.0;
-      if (x < 2.0) {
-        if (y < 2.0) {
-          value = 0.0;
-        } else {
-          value = 8.0;
-        }
-      } else {
-        if (y < 2.0) {
-          value = 12.0;
-        } else {
-          value = 4.0;
-        }
-      }
-      return (value + 0.5) / 16.0;
-    }
-
-    void main() {
-      vec4 color = texture2D(tDiffuse, vUv);
-      float dither = bayerDither(gl_FragCoord.xy);
-      color.rgb = floor(color.rgb * 16.0 + dither) / 16.0;
-      gl_FragColor = color;
-    }
-  `,
-};
-
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const goToRef = useRef<((index: number, openPanel?: boolean) => void) | undefined>(undefined);
@@ -196,8 +151,6 @@ export default function Home() {
 
     const isMobile = window.innerWidth < 768;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    (renderer as any).outputEncoding = (THREE as any).sRGBEncoding;
-    (renderer as any).dither = true;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x080808);
@@ -218,26 +171,41 @@ export default function Home() {
     };
 
     let composer: EffectComposer | undefined;
-    if (!isMobile) {
-      composer = new EffectComposer(renderer);
-      composer.addPass(new RenderPass(scene, camera));
-      const bloom = new UnrealBloomPass(new THREE.Vector2(canvas.clientWidth, canvas.clientHeight), 0.6, 0.5, 0.82);
-      composer.addPass(bloom);
-      const ditherPass = new ShaderPass(DitherShader as any);
-      composer.addPass(ditherPass);
-    }
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloom = new UnrealBloomPass(new THREE.Vector2(canvas.clientWidth, canvas.clientHeight), 0.9, 0.8, 0.35);
+    composer.addPass(bloom);
 
     setRendererSize();
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
     scene.add(ambientLight);
 
-    const fillLight = new THREE.DirectionalLight(0x8ab4ff, 0.4);
-    fillLight.position.set(-5, 5, 5);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 1);
+    fillLight.position.set(-5, 3, 5);
     scene.add(fillLight);
 
-    const accentLight = new THREE.PointLight(0xffffff, 2.5, 12);
-    scene.add(accentLight);
+
+    // const accentLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    // accentLight.position.set(5, 5, 3);
+    // accentLight.target.position.set(0, 0, 0);
+    // scene.add(accentLight);
+    // scene.add(accentLight.target);
+
+    const gradientMap = new THREE.DataTexture(
+      new Uint8Array([
+        64, 64, 64, 255,
+        128, 128, 128, 255,
+        192, 192, 192, 255,
+        255, 255, 255, 255,
+      ]),
+      4,
+      1,
+      THREE.RGBAFormat
+    );
+    gradientMap.magFilter = THREE.NearestFilter;
+    gradientMap.minFilter = THREE.NearestFilter;
+    gradientMap.needsUpdate = true;
 
     const particleCount = isMobile ? 400 : 900;
     const particleGeometry = new THREE.BufferGeometry();
@@ -248,54 +216,99 @@ export default function Home() {
       particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 120;
     }
     particleGeometry.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3));
-    const particleMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.35 });
+
+    const particleCanvas = document.createElement('canvas');
+    particleCanvas.width = 32;
+    particleCanvas.height = 32;
+    const ctx = particleCanvas.getContext('2d');
+    if (ctx) {
+      ctx.beginPath();
+      ctx.arc(16, 16, 15, 0, Math.PI * 2);
+      ctx.fillStyle = 'white';
+      ctx.fill();
+    }
+    const particleTexture = new THREE.CanvasTexture(particleCanvas);
+
+    const particleMaterial = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: isMobile ? 0.04 : 0.08,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+      map: particleTexture,
+      alphaTest: 0.1,
+    });
     scene.add(new THREE.Points(particleGeometry, particleMaterial));
 
-    const objects: THREE.Mesh[] = PROJECTS.map((project, i) => {
+    const objectPositions = [
+      { x: 0, y: 0, z: 0 },
+      { x: 9, y: -1, z: 1 },
+      { x: 16, y: 1.2, z: -0.5 },
+      { x: 25, y: -0.8, z: 0.8 },
+      { x: 32, y: 0.5, z: -1.2 },
+    ];
+
+    const loader = new GLTFLoader();
+    const objects: THREE.Mesh<THREE.BufferGeometry, THREE.Material>[] = PROJECTS.map((project, i) => {
       const geo = makeGeometry(project.geometry);
-      const material = new THREE.MeshStandardMaterial({
+      const material = new THREE.MeshToonMaterial({
         color: project.color,
-        emissive: project.emissive,
-        emissiveIntensity: 0.6,
-        roughness: 0.3,
-        metalness: 0.6,
-      });
-
-      material.onBeforeCompile = (shader) => {
-        shader.vertexShader = shader.vertexShader.replace(
-          "#include <begin_vertex>",
-          `#include <begin_vertex>
-          transformed = floor(transformed * 16.0 + 0.5) / 16.0;`
-        );
-
-        shader.fragmentShader = shader.fragmentShader
-          .replace(/max\( dot\( normal, directionalLightDirection\[ i \] \), 0\.0 \)/g,
-            "max( max( dot( normal, directionalLightDirection[ i ] ), 0.0 ) * 0.5 + 0.5, 0.5 )")
-          .replace(/max\( dot\( normal, pointLightDirection\[ i \] \), 0\.0 \)/g,
-            "max( max( dot( normal, pointLightDirection[ i ] ), 0.0 ) * 0.5 + 0.5, 0.5 )")
-          .replace(/max\( dot\( normal, spotLightDirection\[ i \] \), 0\.0 \)/g,
-            "max( max( dot( normal, spotLightDirection[ i ] ), 0.0 ) * 0.5 + 0.5, 0.5 )");
-      };
-
-      const mesh = new THREE.Mesh(geo, material);
-      const zPos = -i * SPACING;
-      const xOff = [0, 1.2, -1, 0.8, -0.6][i] ?? 0;
-      const yOff = [0, -0.4, 0.6, -0.3, 0.2][i] ?? 0;
-      mesh.position.set(xOff, yOff, zPos);
+        gradientMap,
+        toneMapped: true,
+      } as any);
+      const mesh = new THREE.Mesh(geo, material) as THREE.Mesh<THREE.BufferGeometry, THREE.Material>;
+      const pos = objectPositions[i];
+      mesh.position.set(pos.x, pos.y, pos.z);
       mesh.userData.index = i;
       mesh.userData.basePos = mesh.position.clone();
       scene.add(mesh);
 
-      const wireMaterial = new THREE.MeshBasicMaterial({ color: project.color, wireframe: true, transparent: true, opacity: 0.08 });
-      const wire = new THREE.Mesh(geo, wireMaterial);
-      wire.scale.setScalar(1.08);
-      mesh.add(wire);
+      if (project.id === "bio") {
+        loader.load(
+          "/Models/Suzanne_Main.glb",
+          (gltf) => {
+            const loadedMesh = gltf.scene.getObjectByProperty("type", "Mesh") as THREE.Mesh | undefined;
+            if (!loadedMesh) return;
+            mesh.geometry.dispose();
+            mesh.geometry = loadedMesh.geometry.clone();
+          }
+        );
+
+        loader.load(
+          "/Models/Suzanne_Wireframe.glb",
+          (gltf) => {
+            const wireMesh = gltf.scene.getObjectByProperty("type", "Mesh") as THREE.Mesh | undefined;
+            if (!wireMesh) return;
+            const wireMaterial = new THREE.MeshBasicMaterial({
+              color: project.color,
+              wireframe: true,
+              transparent: true,
+              opacity: 0.6,
+              toneMapped: false,
+            });
+            const wire = new THREE.Mesh(wireMesh.geometry.clone(), wireMaterial);
+            mesh.add(wire);
+          }
+        );
+      } else {
+        const wireMaterial = new THREE.MeshBasicMaterial({
+          color: project.color,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.6,
+          toneMapped: false,
+        });
+        const wire = new THREE.Mesh(geo, wireMaterial);
+        mesh.add(wire);
+      }
 
       return mesh;
     });
 
     const cameraTargets = objects.map((object) => ({
-      pos: new THREE.Vector3(object.position.x * 0.3, object.position.y * 0.3, object.position.z + 4.5),
+      pos: new THREE.Vector3(object.position.x - 4, object.position.y, object.position.z + 2),
       look: object.position.clone(),
     }));
 
@@ -303,7 +316,6 @@ export default function Home() {
     let targetCamPos = cameraTargets[0].pos.clone();
     let targetLookAt = cameraTargets[0].look.clone();
     const currentLookAt = new THREE.Vector3().copy(targetLookAt);
-    const jitterStrength = isMobile ? 0.012 : 0.02;
 
     const resizeCanvas = () => {
       setRendererSize();
@@ -314,7 +326,7 @@ export default function Home() {
       currentIndexRef = index;
       targetCamPos = cameraTargets[index].pos.clone();
       targetLookAt = cameraTargets[index].look.clone();
-      accentLight.color.set(PROJECTS[index].color);
+      // accentLight.color.set(PROJECTS[index].color);
       setCurrentIndex(index);
     };
 
@@ -411,9 +423,7 @@ export default function Home() {
         mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.05);
       });
 
-      accentLight.position.lerp(objects[currentIndexRef].position, 0.08);
-      const jitterTarget = targetCamPos.clone().add(new THREE.Vector3((Math.random() - 0.5) * jitterStrength, (Math.random() - 0.5) * jitterStrength, 0));
-      camera.position.lerp(jitterTarget, 0.06);
+      camera.position.lerp(targetCamPos, 0.06);
       currentLookAt.lerp(targetLookAt, 0.06);
       camera.lookAt(currentLookAt);
 
@@ -454,11 +464,12 @@ export default function Home() {
       });
       particleGeometry.dispose();
       particleMaterial.dispose();
+      particleTexture.dispose();
     };
   }, []);
 
   const handleNavClick = (index: number) => {
-    goToRef.current?.(index, index > 0);
+    goToRef.current?.(index, false);
   };
 
   return (
