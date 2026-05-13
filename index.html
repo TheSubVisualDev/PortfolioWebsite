@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Luna Beauvois — 3D Artist & Unreal Developer</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;1,300&display=swap');
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #080808;
+      --panel-bg: rgba(8, 8, 8, 0.85);
+      --border: rgba(255,255,255,0.07);
+      --text: #e8e8e0;
+      --muted: rgba(232,232,224,0.4);
+      --accent: #c8f542;
+      --sidebar-w: 220px;
+      --top-h: 60px;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      overflow: hidden;
+    }
+
+    canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+
+    /* ── SIDEBAR (desktop) ── */
+    .sidebar {
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      width: var(--sidebar-w);
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      padding: 36px 0;
+      background: var(--panel-bg);
+      backdrop-filter: blur(24px);
+      border-right: 1px solid var(--border);
+    }
+
+    .sidebar-name {
+      padding: 0 28px 32px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 28px;
+    }
+    .sidebar-name h1 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      line-height: 1.3;
+      color: var(--text);
+    }
+    .sidebar-name p {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 4px;
+      letter-spacing: 0.06em;
+    }
+
+    .nav-list {
+      list-style: none;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 0 12px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      color: var(--muted);
+      border: 1px solid transparent;
+      user-select: none;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+    .nav-item.active {
+      background: rgba(200,245,66,0.08);
+      color: var(--accent);
+      border-color: rgba(200,245,66,0.15);
+    }
+
+    .nav-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.6;
+      flex-shrink: 0;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .nav-item.active .nav-dot { opacity: 1; transform: scale(1.4); }
+
+    .nav-index {
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      margin-left: auto;
+      opacity: 0.35;
+    }
+
+    .sidebar-footer {
+      padding: 24px 28px 0;
+      border-top: 1px solid var(--border);
+      margin-top: auto;
+    }
+    .sidebar-footer a {
+      display: block;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      text-decoration: none;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+      transition: color 0.2s;
+    }
+    .sidebar-footer a:hover { color: var(--accent); }
+
+    /* ── TOP NAV (mobile) ── */
+    .topnav {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--top-h);
+      z-index: 10;
+      background: var(--panel-bg);
+      backdrop-filter: blur(24px);
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+      padding: 0 16px;
+      gap: 8px;
+    }
+    .topnav-name {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin-right: auto;
+    }
+    .topnav-btn {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .topnav-btn.active { color: var(--accent); border-color: rgba(200,245,66,0.3); }
+
+    /* ── CANVAS AREA ── */
+    #scene-canvas {
+      position: fixed;
+      top: 0;
+      left: var(--sidebar-w);
+      right: 0;
+      bottom: 0;
+      width: calc(100% - var(--sidebar-w));
+      height: 100%;
+    }
+
+    /* ── INFO PANEL (project card) ── */
+    .info-panel {
+      position: fixed;
+      right: 0; top: 0; bottom: 0;
+      width: 360px;
+      z-index: 20;
+      background: var(--panel-bg);
+      backdrop-filter: blur(32px);
+      border-left: 1px solid var(--border);
+      padding: 48px 36px;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow-y: auto;
+      scrollbar-width: none;
+    }
+    .info-panel::-webkit-scrollbar { display: none; }
+    .info-panel.open { transform: translateX(0); }
+
+    .panel-close {
+      position: absolute;
+      top: 20px; right: 20px;
+      width: 32px; height: 32px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      color: var(--muted);
+      transition: color 0.2s, background 0.2s;
+    }
+    .panel-close:hover { color: var(--text); background: rgba(255,255,255,0.1); }
+
+    .panel-tag {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+
+    .panel-title {
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .panel-subtitle {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 28px;
+      line-height: 1.5;
+    }
+
+    .panel-divider {
+      width: 32px; height: 1px;
+      background: var(--border);
+      margin-bottom: 24px;
+    }
+
+    .panel-body {
+      font-size: 13px;
+      line-height: 1.7;
+      color: rgba(232,232,224,0.75);
+      margin-bottom: 24px;
+    }
+
+    .panel-highlights {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+    .panel-highlights h4 {
+      font-family: 'DM Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .panel-highlights ul { list-style: none; }
+    .panel-highlights li {
+      font-size: 12px;
+      line-height: 1.5;
+      color: rgba(232,232,224,0.7);
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      padding-left: 14px;
+      position: relative;
+    }
+    .panel-highlights li:last-child { border-bottom: none; }
+    .panel-highlights li::before {
+      content: '→';
+      position: absolute; left: 0;
+      color: var(--accent);
+      font-size: 10px;
+    }
+
+    .panel-award {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--accent);
+      background: rgba(200,245,66,0.06);
+      border: 1px solid rgba(200,245,66,0.15);
+      border-radius: 6px;
+      padding: 10px 14px;
+      line-height: 1.6;
+    }
+
+    /* ── SCROLL HINT ── */
+    .scroll-hint {
+      position: fixed;
+      bottom: 28px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+      opacity: 1;
+      transition: opacity 0.6s;
+      z-index: 5;
+    }
+    .scroll-hint.desktop { left: calc(var(--sidebar-w) + 32px); }
+    .scroll-hint.mobile  { left: 50%; transform: translateX(-50%); }
+    .scroll-hint.hidden  { opacity: 0; }
+    .hint-line {
+      width: 24px; height: 1px;
+      background: var(--muted);
+      display: inline-block;
+    }
+
+    /* ── LOADING ── */
+    #loader {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      transition: opacity 0.8s;
+    }
+    #loader.done { opacity: 0; pointer-events: none; }
+    .loader-name {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+    .loader-bar-track {
+      width: 160px; height: 1px;
+      background: var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    .loader-bar {
+      position: absolute;
+      left: -100%; top: 0;
+      width: 100%; height: 100%;
+      background: var(--accent);
+      animation: loadbar 1.2s ease forwards;
+    }
+    @keyframes loadbar {
+      to { left: 0; }
+    }
+    .loader-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+
+    /* ── MOBILE OVERRIDES ── */
+    @media (max-width: 767px) {
+      :root { --sidebar-w: 0px; }
+
+      .sidebar { display: none; }
+      .topnav  { display: flex; }
+
+      #scene-canvas {
+        left: 0;
+        top: var(--top-h);
+        width: 100%;
+        height: calc(100% - var(--top-h));
+      }
+
+      .info-panel {
+        top: var(--top-h);
+        width: 100%;
+        right: 0;
+        border-left: none;
+        border-top: 1px solid var(--border);
+        padding: 32px 24px;
+      }
+
+      .scroll-hint.desktop { display: none; }
+    }
+
+    @media (min-width: 768px) {
+      .scroll-hint.mobile { display: none; }
+      .topnav { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="loader-name">LUNA BEAUVOIS</div>
+  <div class="loader-bar-track"><div class="loader-bar"></div></div>
+  <div class="loader-label">INITIALISING SCENE</div>
+</div>
+
+<!-- SIDEBAR (desktop) -->
+<aside class="sidebar">
+  <div class="sidebar-name">
+    <h1>Luna Beauvois</h1>
+    <p>3D ARTIST & UNREAL DEV</p>
+  </div>
+  <ul class="nav-list" id="desktop-nav"></ul>
+  <div class="sidebar-footer">
+    <a href="mailto:hello@lunabeauvois.com">hello@lunabeauvois.com</a>
+    <a href="#" target="_blank">LinkedIn</a>
+    <a href="#" target="_blank">ArtStation</a>
+  </div>
+</aside>
+
+<!-- TOP NAV (mobile) -->
+<nav class="topnav" id="mobile-nav">
+  <span class="topnav-name">LUNA B.</span>
+</nav>
+
+<!-- THREE.JS CANVAS -->
+<canvas id="scene-canvas"></canvas>
+
+<!-- INFO PANEL -->
+<div class="info-panel" id="info-panel">
+  <div class="panel-close" id="panel-close">✕</div>
+  <div class="panel-tag" id="p-tag"></div>
+  <h2 class="panel-title" id="p-title"></h2>
+  <p class="panel-subtitle" id="p-subtitle"></p>
+  <div class="panel-divider"></div>
+  <p class="panel-body" id="p-body"></p>
+  <div class="panel-highlights" id="p-highlights"></div>
+  <div class="panel-award" id="p-award" style="display:none"></div>
+</div>
+
+<!-- SCROLL HINTS -->
+<div class="scroll-hint desktop" id="hint-d"><span class="hint-line"></span> SCROLL OR CLICK TO NAVIGATE</div>
+<div class="scroll-hint mobile"  id="hint-m"><span class="hint-line"></span> SWIPE TO NAVIGATE</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+// ─────────────────────────────────────────────
+// PROJECT DATA
+// ─────────────────────────────────────────────
+const PROJECTS = [
+  {
+    id: 'bio',
+    label: 'Bio',
+    tag: '00 / ABOUT',
+    title: 'Luna Beauvois',
+    subtitle: 'Freelance 3D Artist & Unreal Developer',
+    body: 'I build 3D characters, environments, and interactive experiences for games, films, and VR projects. I specialise in motion capture — from directing actors to cleaning up the data — and I\'m fast at turning concepts into finished assets, whether you need realistic or stylised work.',
+    highlights: ['3D Modelling, Rigging & Animation', 'Motion Capture Direction & Data Cleanup', 'Unreal Engine Development & Custom Shaders', 'VR Experience Development', 'Virtual Production & Real-time Rendering'],
+    award: null,
+    color: 0x4a9eff,
+    emissive: 0x1a3a6e,
+    geometry: 'icosahedron',
+  },
+  {
+    id: 'howlcast',
+    label: 'HowlCast',
+    tag: '01 / PROJECT',
+    title: 'HowlCast',
+    subtitle: 'Personal VTuber Software — Unreal Engine',
+    body: 'An experimental VTuber application built in Unreal Engine for real-time 3D avatar streaming. Most VTuber software uses Unity — this explores what Unreal\'s rendering pipeline makes possible.',
+    highlights: ['Basic 3D avatar streaming', 'Live facial motion capture integration', 'Twitch streaming service integration', 'Real-time rendering in Unreal'],
+    award: null,
+    color: 0x9b59f5,
+    emissive: 0x3d1a6e,
+    geometry: 'torus',
+  },
+  {
+    id: 'infinite-museum',
+    label: 'Infinite Museum',
+    tag: '02 / PROJECT',
+    title: 'Infinite Museum',
+    subtitle: 'VR Cultural Experience — 3D Artist & Mocap Lead',
+    body: 'A VR experience showcasing the history of Ayscoughfee Hall in Lincolnshire, funded by the National Lottery Heritage Fund. Visitors move through different periods of the hall\'s history via environmental storytelling and motion-captured historical characters.',
+    highlights: ['All 3D characters from scratch, incl. ARKit facial blend shapes', 'Entire first floor environment — period-accurate modelling & texturing', 'Directed and performed motion capture sessions', 'Cleaned up and integrated all mocap data'],
+    award: null,
+    color: 0xff6eb4,
+    emissive: 0x6e1a4a,
+    geometry: 'octahedron',
+  },
+  {
+    id: 'voyagers',
+    label: 'Voyagers',
+    tag: '03 / PROJECT',
+    title: 'Voyagers',
+    subtitle: 'Short Film — Writer, Director & Technical Lead',
+    body: 'A 5-minute science fiction short written and directed at MBD, designed to showcase virtual production capabilities while upskilling the team in motion capture workflows.',
+    highlights: ['Wrote the script and directed the project', 'Managed MBD\'s 8-person team throughout production', 'Created the character from modelling through final rigging', 'Led motion capture sessions using Vicon systems', 'Set up real-time camera tracking with Unreal Engine', 'Edited the final film'],
+    award: '🏆 Nominated — We Are Creative Independent Film of the Year\n🏆 Nominated — Manchester Lift-Off Film Festival 2025\n🥇 Winner — Best Short Animation, Buffalo Roots Film Festival 2025',
+    color: 0xff8c42,
+    emissive: 0x6e3010,
+    geometry: 'cone',
+  },
+  {
+    id: 'steel-town',
+    label: 'Steel Town Tales',
+    tag: '04 / PROJECT',
+    title: 'Steel Town Tales',
+    subtitle: 'Animated Series — Character & Environment Artist',
+    body: 'Character and environment work for an animated series set in a fictional steel town. Responsible for asset creation across characters and world-building environments.',
+    highlights: ['Character design and 3D modelling', 'Environment art and props', 'Texture and material work'],
+    award: null,
+    color: 0xf5c842,
+    emissive: 0x6e4e10,
+    geometry: 'box',
+  },
+];
+
+// ─────────────────────────────────────────────
+// SETUP
+// ─────────────────────────────────────────────
+const canvas   = document.getElementById('scene-canvas');
+const isMobile = window.innerWidth < 768;
+
+function canvasWidth()  { return canvas.clientWidth; }
+function canvasHeight() { return canvas.clientHeight; }
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.setSize(canvasWidth(), canvasHeight());
+
+const scene  = new THREE.Scene();
+scene.background = new THREE.Color(0x080808);
+scene.fog = new THREE.FogExp2(0x080808, 0.035);
+
+const camera = new THREE.PerspectiveCamera(55, canvasWidth() / canvasHeight(), 0.1, 200);
+camera.position.set(0, 0, 10);
+
+// ─────────────────────────────────────────────
+// POST-PROCESSING (desktop only)
+// ─────────────────────────────────────────────
+let composer;
+if (!isMobile) {
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(
+    new THREE.Vector2(canvasWidth(), canvasHeight()),
+    0.6,   // strength
+    0.5,   // radius
+    0.82   // threshold
+  );
+  composer.addPass(bloom);
+}
+
+// ─────────────────────────────────────────────
+// LIGHTS
+// ─────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+
+const fillLight = new THREE.DirectionalLight(0x8ab4ff, 0.4);
+fillLight.position.set(-5, 5, 5);
+scene.add(fillLight);
+
+// Per-project accent lights (hidden, moved to active object)
+const accentLight = new THREE.PointLight(0xffffff, 2.5, 12);
+scene.add(accentLight);
+
+// ─────────────────────────────────────────────
+// PARTICLES
+// ─────────────────────────────────────────────
+const particleCount = isMobile ? 400 : 900;
+const pGeo  = new THREE.BufferGeometry();
+const pPos  = new Float32Array(particleCount * 3);
+for (let i = 0; i < particleCount; i++) {
+  pPos[i*3]   = (Math.random() - 0.5) * 80;
+  pPos[i*3+1] = (Math.random() - 0.5) * 40;
+  pPos[i*3+2] = (Math.random() - 0.5) * 60;
+}
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+const pMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.05, transparent: true, opacity: 0.35 });
+scene.add(new THREE.Points(pGeo, pMat));
+
+// ─────────────────────────────────────────────
+// OBJECTS (one per project, along Z path)
+// ─────────────────────────────────────────────
+const SPACING = 8;
+
+function makeGeometry(type) {
+  switch (type) {
+    case 'icosahedron': return new THREE.IcosahedronGeometry(1.1, 1);
+    case 'torus':       return new THREE.TorusGeometry(0.9, 0.35, 20, 60);
+    case 'octahedron':  return new THREE.OctahedronGeometry(1.2, 0);
+    case 'cone':        return new THREE.ConeGeometry(0.9, 1.8, 6);
+    case 'box':         return new THREE.BoxGeometry(1.4, 1.4, 1.4);
+    default:            return new THREE.IcosahedronGeometry(1, 0);
+  }
+}
+
+const objects = PROJECTS.map((p, i) => {
+  const geo = makeGeometry(p.geometry);
+  const mat = new THREE.MeshStandardMaterial({
+    color: p.color,
+    emissive: p.emissive,
+    emissiveIntensity: 0.6,
+    roughness: 0.3,
+    metalness: 0.6,
+    wireframe: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  // Spread along Z, slight XY offsets for depth
+  const zPos = -i * SPACING;
+  const xOff = [0, 1.2, -1, 0.8, -0.6][i];
+  const yOff = [0, -0.4, 0.6, -0.3, 0.2][i];
+  mesh.position.set(xOff, yOff, zPos);
+  mesh.userData.index = i;
+  mesh.userData.basePos = mesh.position.clone();
+  scene.add(mesh);
+
+  // Wireframe overlay for style
+  const wireMat = new THREE.MeshBasicMaterial({ color: p.color, wireframe: true, transparent: true, opacity: 0.08 });
+  const wire = new THREE.Mesh(geo, wireMat);
+  wire.scale.setScalar(1.08);
+  mesh.add(wire);
+
+  return mesh;
+});
+
+// ─────────────────────────────────────────────
+// CAMERA PATH
+// ─────────────────────────────────────────────
+const cameraTargets = objects.map((o, i) => ({
+  pos: new THREE.Vector3(o.position.x * 0.3, o.position.y * 0.3, o.position.z + 4.5),
+  look: o.position.clone(),
+}));
+
+let currentIndex = 0;
+let targetCamPos  = cameraTargets[0].pos.clone();
+let targetLookAt  = cameraTargets[0].look.clone();
+const currentLookAt = new THREE.Vector3();
+currentLookAt.copy(targetLookAt);
+
+// ─────────────────────────────────────────────
+// NAVIGATION
+// ─────────────────────────────────────────────
+function goTo(index, openPanel = false) {
+  if (index < 0 || index >= PROJECTS.length) return;
+  currentIndex = index;
+  targetCamPos = cameraTargets[index].pos.clone();
+  targetLookAt = cameraTargets[index].look.clone();
+  accentLight.color.set(PROJECTS[index].color);
+
+  updateNavUI();
+  if (openPanel) openInfoPanel(index);
+  hideHints();
+}
+
+function updateNavUI() {
+  document.querySelectorAll('.nav-item').forEach((el, i) => el.classList.toggle('active', i === currentIndex));
+  document.querySelectorAll('.topnav-btn').forEach((el, i) => el.classList.toggle('active', i === currentIndex));
+}
+
+// ─────────────────────────────────────────────
+// BUILD NAV
+// ─────────────────────────────────────────────
+const desktopNav = document.getElementById('desktop-nav');
+const mobileNav  = document.getElementById('mobile-nav');
+
+PROJECTS.forEach((p, i) => {
+  // Desktop
+  const li = document.createElement('li');
+  li.className = 'nav-item' + (i === 0 ? ' active' : '');
+  li.innerHTML = `<span class="nav-dot"></span>${p.label}<span class="nav-index">0${i}</span>`;
+  li.addEventListener('click', () => goTo(i, i > 0));
+  desktopNav.appendChild(li);
+
+  // Mobile
+  const btn = document.createElement('button');
+  btn.className = 'topnav-btn' + (i === 0 ? ' active' : '');
+  btn.textContent = p.label;
+  btn.addEventListener('click', () => goTo(i, i > 0));
+  mobileNav.appendChild(btn);
+});
+
+// ─────────────────────────────────────────────
+// INFO PANEL
+// ─────────────────────────────────────────────
+const panel = document.getElementById('info-panel');
+document.getElementById('panel-close').addEventListener('click', () => {
+  panel.classList.remove('open');
+});
+
+function openInfoPanel(i) {
+  const p = PROJECTS[i];
+  document.getElementById('p-tag').textContent      = p.tag;
+  document.getElementById('p-title').textContent    = p.title;
+  document.getElementById('p-subtitle').textContent = p.subtitle;
+  document.getElementById('p-body').textContent     = p.body;
+
+  const hl = document.getElementById('p-highlights');
+  hl.innerHTML = '<h4>Key Work</h4><ul>' + p.highlights.map(h => `<li>${h}</li>`).join('') + '</ul>';
+
+  const aw = document.getElementById('p-award');
+  if (p.award) {
+    aw.style.display = 'block';
+    aw.innerHTML = p.award.split('\n').join('<br>');
+  } else {
+    aw.style.display = 'none';
+  }
+
+  panel.classList.add('open');
+}
+
+// ─────────────────────────────────────────────
+// CLICK ON OBJECT
+// ─────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const mouse     = new THREE.Vector2();
+
+function onCanvasClick(e) {
+  const rect = canvas.getBoundingClientRect();
+  const cx = (e.clientX ?? e.touches?.[0]?.clientX) - rect.left;
+  const cy = (e.clientY ?? e.touches?.[0]?.clientY) - rect.top;
+  mouse.x =  (cx / rect.width)  * 2 - 1;
+  mouse.y = -(cy / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(objects, false);
+  if (hits.length > 0) {
+    const idx = hits[0].object.userData.index;
+    if (idx === currentIndex) {
+      openInfoPanel(idx);
+    } else {
+      goTo(idx, false);
+    }
+  }
+}
+
+canvas.addEventListener('click', onCanvasClick);
+canvas.addEventListener('touchend', e => { e.preventDefault(); onCanvasClick(e); }, { passive: false });
+
+// ─────────────────────────────────────────────
+// SCROLL
+// ─────────────────────────────────────────────
+let wheelLocked = false;
+window.addEventListener('wheel', (e) => {
+  if (wheelLocked) return;
+  wheelLocked = true;
+  setTimeout(() => wheelLocked = false, 700);
+  goTo(currentIndex + (e.deltaY > 0 ? 1 : -1));
+}, { passive: true });
+
+// Touch swipe for mobile (horizontal on canvas)
+let tStartX = 0, tStartY = 0;
+canvas.addEventListener('touchstart', e => {
+  tStartX = e.touches[0].clientX;
+  tStartY = e.touches[0].clientY;
+}, { passive: true });
+canvas.addEventListener('touchend', e => {
+  const dx = tStartX - e.changedTouches[0].clientX;
+  const dy = tStartY - e.changedTouches[0].clientY;
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+    goTo(currentIndex + (dx > 0 ? 1 : -1));
+  }
+}, { passive: true });
+
+// Keyboard
+window.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') goTo(currentIndex + 1);
+  if (e.key === 'ArrowUp'   || e.key === 'ArrowLeft')  goTo(currentIndex - 1);
+  if (e.key === 'Enter' || e.key === ' ') openInfoPanel(currentIndex);
+  if (e.key === 'Escape') panel.classList.remove('open');
+});
+
+// ─────────────────────────────────────────────
+// HINTS
+// ─────────────────────────────────────────────
+let hintsHidden = false;
+function hideHints() {
+  if (hintsHidden) return;
+  hintsHidden = true;
+  document.getElementById('hint-d').classList.add('hidden');
+  document.getElementById('hint-m').classList.add('hidden');
+}
+setTimeout(hideHints, 5000);
+
+// ─────────────────────────────────────────────
+// RESIZE
+// ─────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  camera.aspect = canvasWidth() / canvasHeight();
+  camera.updateProjectionMatrix();
+  renderer.setSize(canvasWidth(), canvasHeight());
+  if (composer) composer.setSize(canvasWidth(), canvasHeight());
+});
+
+// ─────────────────────────────────────────────
+// ANIMATION LOOP
+// ─────────────────────────────────────────────
+const clock = new THREE.Clock();
+const _camLerpPos  = new THREE.Vector3();
+const _camLookTemp = new THREE.Vector3();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  // Idle rotate & float each object
+  objects.forEach((mesh, i) => {
+    const base = mesh.userData.basePos;
+    const active = i === currentIndex;
+    mesh.rotation.x += 0.003;
+    mesh.rotation.y += active ? 0.006 : 0.003;
+    mesh.position.y  = base.y + Math.sin(t * 0.6 + i * 1.2) * (active ? 0.18 : 0.08);
+
+    // Scale pulse on active
+    const targetScale = active ? 1.15 : 1.0;
+    mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.05);
+  });
+
+  // Move accent light to active object
+  accentLight.position.lerp(objects[currentIndex].position, 0.08);
+
+  // Smooth camera
+  camera.position.lerp(targetCamPos, 0.06);
+  currentLookAt.lerp(targetLookAt, 0.06);
+  camera.lookAt(currentLookAt);
+
+  if (composer) {
+    composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+goTo(0);
+animate();
+
+// Dismiss loader
+setTimeout(() => {
+  document.getElementById('loader').classList.add('done');
+  setTimeout(() => document.getElementById('loader').remove(), 900);
+}, 1400);
+</script>
+</body>
+</html>
