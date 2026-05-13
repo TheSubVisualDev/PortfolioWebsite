@@ -341,7 +341,7 @@ export default function Home() {
 
       } else if (project.id === "steel-town") {
         loader.load(
-          "/Models/stt-ingot-f.glb",
+          "/Models/stt-ingot.glb",
           (gltf) => {
             const loadedMesh = gltf.scene.getObjectByProperty("type", "Mesh") as THREE.Mesh | undefined;
             if (!loadedMesh) return;
